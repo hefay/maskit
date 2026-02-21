@@ -1,0 +1,38 @@
+# --- Go related ---
+# Compiled binaries and object files
+bin/
+out/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts and coverage reports
+*.test
+*.out
+coverage.txt
+
+# Dependency directory (only if you use 'go mod vendor')
+# vendor/
+
+# --- JetBrains (IntelliJ IDEA / GoLand) ---
+# Project-specific settings
+.idea/
+*.iml
+*.iws
+
+# Optional: If you want to share shared run configurations, uncomment these:
+# !.idea/runConfigurations/
+# !.idea/codeStyles/
+
+# --- Environment and Secrets ---
+# Never commit sensitive credentials or local overrides
+.env
+.env.local
+*.secret
+
+# --- OS specific ---
+.DS_Store
+Thumbs.db
