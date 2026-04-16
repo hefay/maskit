@@ -82,6 +82,7 @@ type Transport interface {
 
 type MaskingService struct {
 	transport Transport
+	apiKey string
 }
 
 type MaskingServiceOption func(*MaskingService)
@@ -89,6 +90,12 @@ type MaskingServiceOption func(*MaskingService)
 func WithTransport(transport Transport) MaskingServiceOption {
 	return func(s *MaskingService) {
 		s.transport = transport
+	}
+}
+
+func WithApiKey(key string) MaskingServiceOption {
+	return func(s *MaskingService) {
+		s.apiKey = key
 	}
 }
 
