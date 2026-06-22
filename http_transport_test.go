@@ -6,55 +6,40 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestJSONDeserializer_Deserialize(t *testing.T) {
-	jsonPayload := `{"JobId": "job-12345"}`
-	reader := strings.NewReader(jsonPayload)
+	reader := strings.NewReader(`{"JobId": "job-12345"}`)
 
-	deserializer := &JSONDeserializer{}
-	resp, err := deserializer.Deserialize(reader)
+	resp, err := (&JSONDeserializer{}).Deserialize(reader)
 
-	if err != nil {
-		t.Fatalf("Expected success, but got an error: %v", err)
-	}
-
-	if resp.JobID != "job-12345" {
-		t.Errorf("Expected JobID to be 'job-12345', got '%s'", resp.JobID)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "job-12345", resp.JobID)
 }
 
 func TestMultipartSerializer_Serialize(t *testing.T) {
-	// Prepare test data
-	mockImageContent := "fake-image-data"
 	req := MaskingRequest{
-		Image:         strings.NewReader(mockImageContent),
-		Faces:         true,
-		BlurStrength:  50,
-		EdgeBlurSize:  1.5,
-		UseWebhook:    true,
-		Metadata:      "test-meta",
+		Image:        strings.NewReader("fake-image-data"),
+		Faces:        true,
+		BlurStrength: 50,
+		EdgeBlurSize: 1.5,
+		UseWebhook:   true,
+		Metadata:     "test-meta",
 	}
 
-	serializer := &MultipartSerializer{}
-	bodyReader, contentType, err := serializer.Serialize(req)
+	bodyReader, contentType, err := (&MultipartSerializer{}).Serialize(req)
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(contentType, "multipart/form-data"))
 
-	if err != nil {
-		t.Fatalf("Expected serialization to succeed, got error: %v", err)
-	}
-
-	if !strings.HasPrefix(contentType, "multipart/form-data") {
-		t.Errorf("Expected Content-Type starting with 'multipart/form-data', got '%s'", contentType)
-	}
-
-	// Read the entire request body to verify its contents
 	bodyBytes, _ := io.ReadAll(bodyReader)
 	bodyString := string(bodyBytes)
 
-	// Check if it contains the correct camelCase keys and our values
-	expectedStrings := []string{
+	expected := []string{
 		`name="image"; filename="upload.jpg"`,
-		mockImageContent,
+		"fake-image-data",
 		`name="faces"`,
 		"blur",
 		`name="blurStrength"`,
@@ -66,76 +51,128 @@ func TestMultipartSerializer_Serialize(t *testing.T) {
 		`name="metadata"`,
 		"test-meta",
 	}
-
-	for _, expected := range expectedStrings {
-		if !strings.Contains(bodyString, expected) {
-			t.Errorf("Expected body to contain '%s', but it wasn't found. Body: %s", expected, bodyString)
-		}
+	for _, s := range expected {
+		assert.Contains(t, bodyString, s)
 	}
 }
 
 func TestHTTPTransport_Send_Success(t *testing.T) {
-	// 1. Create a test (mock) server
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify the server received the correct method and Content-Type
-		if r.Method != http.MethodPost {
-			t.Errorf("Expected POST method, got %s", r.Method)
-		}
-		if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-			t.Errorf("Invalid Content-Type: %s", r.Header.Get("Content-Type"))
-		}
-
-		// Return a successful response
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.True(t, strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data"))
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"JobId": "mock-job-999"}`))
 	}))
-	defer mockServer.Close() // Don't forget to close the server after the test
+	defer mockServer.Close()
 
-	// 2. Configure the transport
-	transport := &HTTPTransport{
-		Client: mockServer.Client(), // Use the client from the test server
-	}
-
-	// 3. Execute the method under test
-	req := MaskingRequest{
+	resp, err := (&HTTPTransport{Client: mockServer.Client()}).Send(mockServer.URL, MaskingRequest{
 		Image: strings.NewReader("dummy-image"),
-	}
-	resp, err := transport.Send(mockServer.URL, req)
+	})
 
-	// 4. Verify the results
-	if err != nil {
-		t.Fatalf("Expected success, got error: %v", err)
-	}
-
-	if resp.JobID != "mock-job-999" {
-		t.Errorf("Expected JobID to be 'mock-job-999', got '%s'", resp.JobID)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "mock-job-999", resp.JobID)
 }
 
 func TestHTTPTransport_Send_APIError(t *testing.T) {
-	// Set up the mock server to return an HTTP error code (e.g., 400 Bad Request)
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error": "invalid image format"}`))
 	}))
 	defer mockServer.Close()
 
-	transport := &HTTPTransport{
-		Client: mockServer.Client(),
-	}
-
-	req := MaskingRequest{
+	_, err := (&HTTPTransport{Client: mockServer.Client()}).Send(mockServer.URL, MaskingRequest{
 		Image: strings.NewReader("bad-data"),
-	}
-	_, err := transport.Send(mockServer.URL, req)
+	})
 
-	if err == nil {
-		t.Fatal("Expected an error due to 400 Bad Request, but none occurred")
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "400")
+	assert.Contains(t, err.Error(), "invalid image format")
+}
 
-	// Verify that the error message contains the status code and the server message
-	if !strings.Contains(err.Error(), "400") || !strings.Contains(err.Error(), "invalid image format") {
-		t.Errorf("Error does not contain the expected HTTP status information. Got: %v", err)
-	}
+func TestHTTPTransport_Send_SetsAPIKeyHeader(t *testing.T) {
+	var actualKey string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		actualKey = r.Header.Get(APIKeyHeader)
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"JobId": "job-1"}`))
+	}))
+	defer mockServer.Close()
+
+	_, _ = (&HTTPTransport{
+		Client: mockServer.Client(),
+		APIKey: "my-secret-key",
+	}).Send(mockServer.URL, MaskingRequest{Image: strings.NewReader("img")})
+
+	assert.Equal(t, "my-secret-key", actualKey)
+}
+
+func TestHTTPTransport_GetJobStatus(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodGet, r.Method)
+			assert.Equal(t, "job-123", r.URL.Query().Get("jobid"))
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"JobId": "job-123", "Status": "readytodownload"}`))
+		}))
+		defer mockServer.Close()
+
+		resp, err := (&HTTPTransport{Client: mockServer.Client()}).GetJobStatus(mockServer.URL + "?jobid=job-123")
+
+		require.NoError(t, err)
+		assert.Equal(t, "job-123", resp.JobID)
+		assert.Equal(t, JobStatusReadyToDownload, resp.Status)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error": "job not found"}`))
+		}))
+		defer mockServer.Close()
+
+		_, err := (&HTTPTransport{Client: mockServer.Client()}).GetJobStatus(mockServer.URL)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "404")
+		assert.Contains(t, err.Error(), "job not found")
+	})
+}
+
+func TestHTTPTransport_DownloadImage(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		expectedData := []byte("fake-jpeg-binary-data")
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodGet, r.Method)
+			assert.Equal(t, "job-456", r.URL.Query().Get("jobid"))
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(expectedData)
+		}))
+		defer mockServer.Close()
+
+		reader, err := (&HTTPTransport{Client: mockServer.Client()}).DownloadImage(mockServer.URL + "?jobid=job-456")
+		require.NoError(t, err)
+		defer reader.Close()
+
+		data, err := io.ReadAll(reader)
+		require.NoError(t, err)
+		assert.Equal(t, expectedData, data)
+	})
+
+	t.Run("not ready", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error": "image is not ready for download"}`))
+		}))
+		defer mockServer.Close()
+
+		_, err := (&HTTPTransport{Client: mockServer.Client()}).DownloadImage(mockServer.URL)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "400")
+		assert.Contains(t, err.Error(), "not ready")
+	})
 }

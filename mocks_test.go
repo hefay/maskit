@@ -5,6 +5,8 @@
 package maskit
 
 import (
+	"io"
+
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -97,6 +99,122 @@ func (_c *MockTransport_Send_Call) Return(maskingResponse MaskingResponse, err e
 }
 
 func (_c *MockTransport_Send_Call) RunAndReturn(run func(s string, maskingRequest MaskingRequest) (MaskingResponse, error)) *MockTransport_Send_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetJobStatus provides a mock function for the type MockTransport
+func (_mock *MockTransport) GetJobStatus(s string) (ImageStatusResponse, error) {
+	ret := _mock.Called(s)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetJobStatus")
+	}
+
+	var r0 ImageStatusResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(string) (ImageStatusResponse, error)); ok {
+		return returnFunc(s)
+	}
+	if returnFunc, ok := ret.Get(0).(func(string) ImageStatusResponse); ok {
+		r0 = returnFunc(s)
+	} else {
+		r0 = ret.Get(0).(ImageStatusResponse)
+	}
+	if returnFunc, ok := ret.Get(1).(func(string) error); ok {
+		r1 = returnFunc(s)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockTransport_GetJobStatus_Call is a *mock.Call that shadows Run/Return methods
+type MockTransport_GetJobStatus_Call struct {
+	*mock.Call
+}
+
+// GetJobStatus is a helper method to define mock.On call
+func (_e *MockTransport_Expecter) GetJobStatus(s interface{}) *MockTransport_GetJobStatus_Call {
+	return &MockTransport_GetJobStatus_Call{Call: _e.mock.On("GetJobStatus", s)}
+}
+
+func (_c *MockTransport_GetJobStatus_Call) Run(run func(s string)) *MockTransport_GetJobStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		run(arg0)
+	})
+	return _c
+}
+
+func (_c *MockTransport_GetJobStatus_Call) Return(imageStatusResponse ImageStatusResponse, err error) *MockTransport_GetJobStatus_Call {
+	_c.Call.Return(imageStatusResponse, err)
+	return _c
+}
+
+func (_c *MockTransport_GetJobStatus_Call) RunAndReturn(run func(s string) (ImageStatusResponse, error)) *MockTransport_GetJobStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DownloadImage provides a mock function for the type MockTransport
+func (_mock *MockTransport) DownloadImage(s string) (io.ReadCloser, error) {
+	ret := _mock.Called(s)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DownloadImage")
+	}
+
+	var r0 io.ReadCloser
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(string) (io.ReadCloser, error)); ok {
+		return returnFunc(s)
+	}
+	if returnFunc, ok := ret.Get(0).(func(string) io.ReadCloser); ok {
+		r0 = returnFunc(s)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(io.ReadCloser)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(string) error); ok {
+		r1 = returnFunc(s)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockTransport_DownloadImage_Call is a *mock.Call that shadows Run/Return methods
+type MockTransport_DownloadImage_Call struct {
+	*mock.Call
+}
+
+// DownloadImage is a helper method to define mock.On call
+func (_e *MockTransport_Expecter) DownloadImage(s interface{}) *MockTransport_DownloadImage_Call {
+	return &MockTransport_DownloadImage_Call{Call: _e.mock.On("DownloadImage", s)}
+}
+
+func (_c *MockTransport_DownloadImage_Call) Run(run func(s string)) *MockTransport_DownloadImage_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		run(arg0)
+	})
+	return _c
+}
+
+func (_c *MockTransport_DownloadImage_Call) Return(readCloser io.ReadCloser, err error) *MockTransport_DownloadImage_Call {
+	_c.Call.Return(readCloser, err)
+	return _c
+}
+
+func (_c *MockTransport_DownloadImage_Call) RunAndReturn(run func(s string) (io.ReadCloser, error)) *MockTransport_DownloadImage_Call {
 	_c.Call.Return(run)
 	return _c
 }
