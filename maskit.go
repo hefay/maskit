@@ -86,6 +86,7 @@ type Transport interface {
 type MaskingService struct {
 	transport Transport
 	apiKey    string
+	baseURL   string
 }
 
 type MaskingServiceOption func(*MaskingService)
@@ -100,6 +101,19 @@ func WithApiKey(key string) MaskingServiceOption {
 	return func(s *MaskingService) {
 		s.apiKey = key
 	}
+}
+
+func WithBaseURL(url string) MaskingServiceOption {
+	return func(s *MaskingService) {
+		s.baseURL = url
+	}
+}
+
+func (ms *MaskingService) urlFor(path string) string {
+	if ms.baseURL != "" {
+		return ms.baseURL + path
+	}
+	return MaskitAPIURL + path
 }
 
 func NewMaskingService(options ...MaskingServiceOption) *MaskingService {
@@ -123,7 +137,7 @@ func (ms *MaskingService) RequestMasking(req MaskingRequest) (MaskingResponse, e
 	if !req.Shape.IsValid() {
 		return MaskingResponse{}, fmt.Errorf("invalid shape: %s", req.Shape)
 	}
-	response, err := ms.transport.Send(MaskitAPIURL+pathProcessImage, req)
+	response, err := ms.transport.Send(ms.urlFor(pathProcessImage), req)
 	if err != nil {
 		return MaskingResponse{}, err
 	}
@@ -131,11 +145,11 @@ func (ms *MaskingService) RequestMasking(req MaskingRequest) (MaskingResponse, e
 }
 
 func (ms *MaskingService) GetJobStatus(jobID string) (ImageStatusResponse, error) {
-	return ms.transport.GetJobStatus(MaskitAPIURL + pathImageStatus + "?jobid=" + jobID)
+	return ms.transport.GetJobStatus(ms.urlFor(pathImageStatus + "?jobid=" + jobID))
 }
 
 func (ms *MaskingService) DownloadImage(jobID string) (io.ReadCloser, error) {
-	return ms.transport.DownloadImage(MaskitAPIURL + pathImageDownload + "?jobid=" + jobID)
+	return ms.transport.DownloadImage(ms.urlFor(pathImageDownload + "?jobid=" + jobID))
 }
 
 func PrepareForMasking(image io.Reader) MaskingRequest {

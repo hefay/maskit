@@ -96,7 +96,7 @@ func run() error {
 
 	resp, err := service.RequestMasking(req)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return wrapError(fmt.Errorf("request failed: %w", err))
 	}
 
 	verboseLogf(*verbose, "Job submitted: %s", resp.JobID)
@@ -109,7 +109,7 @@ func run() error {
 		status, err := service.GetJobStatus(resp.JobID)
 		if err != nil {
 			fmt.Println()
-			return fmt.Errorf("status check failed: %w", err)
+			return wrapError(fmt.Errorf("status check failed: %w", err))
 		}
 
 		switch status.Status {
@@ -124,7 +124,7 @@ func run() error {
 
 			reader, err := service.DownloadImage(resp.JobID)
 			if err != nil {
-				return fmt.Errorf("download failed: %w", err)
+				return wrapError(fmt.Errorf("download failed: %w", err))
 			}
 			defer reader.Close()
 
@@ -170,6 +170,16 @@ func run() error {
 
 		time.Sleep(pollInterval)
 	}
+}
+
+func wrapError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(err.Error(), "401") {
+		return fmt.Errorf("%w\n\nHint: Check that your API key is correct. Use --key, MASKIT_API_KEY env, or ~/.maskit", err)
+	}
+	return err
 }
 
 func log(verbose bool, msg string) {

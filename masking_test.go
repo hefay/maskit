@@ -3,9 +3,12 @@ package maskit
 import (
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -250,4 +253,200 @@ func TestMaskImage_SendError(t *testing.T) {
 	ctx := context.Background()
 	_, err := client.MaskImage(ctx, strings.NewReader("test-image"))
 	assert.ErrorIs(t, err, assert.AnError)
+}
+
+func TestMaskImage_Integration(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/masking/process-image":
+			assert.Equal(t, http.MethodPost, r.Method)
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"JobId": "int-job-1"}`))
+
+		case "/masking/image-status":
+			assert.Equal(t, http.MethodGet, r.Method)
+			assert.Equal(t, "int-job-1", r.URL.Query().Get("jobid"))
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"JobId": "int-job-1", "Status": "ReadyToDownload"}`))
+
+		case "/masking/image-download":
+			assert.Equal(t, http.MethodGet, r.Method)
+			assert.Equal(t, "int-job-1", r.URL.Query().Get("jobid"))
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write([]byte("masked-image-data"))
+
+		default:
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer mockServer.Close()
+
+	client := NewMaskingService(
+		WithTransport(&HTTPTransport{Client: mockServer.Client()}),
+		WithBaseURL(mockServer.URL),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	data, err := client.MaskImage(ctx, strings.NewReader("test-image"))
+
+	require.NoError(t, err)
+	assert.Equal(t, "masked-image-data", string(data))
+}
+
+func TestMaskImage_Integration_Unauthorized(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error": "invalid API key"}`))
+	}))
+	defer mockServer.Close()
+
+	client := NewMaskingService(
+		WithTransport(&HTTPTransport{Client: mockServer.Client()}),
+		WithBaseURL(mockServer.URL),
+	)
+
+	_, err := client.MaskImage(context.Background(), strings.NewReader("test-image"))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "401")
+	assert.Contains(t, err.Error(), "invalid API key")
+}
+
+func TestMaskImage_Integration_FullPollFlow(t *testing.T) {
+	pollCount := 0
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/masking/process-image":
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"JobId": "int-poll-1"}`))
+
+		case "/masking/image-status":
+			pollCount++
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "application/json")
+			status := "InProgress"
+			if pollCount > 2 {
+				status = "ReadyToDownload"
+			}
+			_, _ = w.Write([]byte(`{"JobId": "int-poll-1", "Status": "` + status + `"}`))
+
+		case "/masking/image-download":
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write([]byte("polled-image-data"))
+		}
+	}))
+	defer mockServer.Close()
+
+	client := NewMaskingService(
+		WithTransport(&HTTPTransport{Client: mockServer.Client()}),
+		WithBaseURL(mockServer.URL),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	data, err := client.MaskImage(ctx, strings.NewReader("test-image"))
+
+	require.NoError(t, err)
+	assert.Equal(t, "polled-image-data", string(data))
+	assert.GreaterOrEqual(t, pollCount, 2, "should have polled at least 3 times")
+}
+
+func TestGetJobStatus_Integration(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/masking/image-status", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"JobId": "job-42", "Status": "InProgress"}`))
+	}))
+	defer mockServer.Close()
+
+	client := NewMaskingService(
+		WithTransport(&HTTPTransport{Client: mockServer.Client()}),
+		WithBaseURL(mockServer.URL),
+	)
+
+	resp, err := client.GetJobStatus("job-42")
+
+	require.NoError(t, err)
+	assert.Equal(t, "job-42", resp.JobID)
+	assert.Equal(t, JobStatusInProgress, resp.Status)
+}
+
+func TestDownloadImage_Integration(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/masking/image-download", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte("downloaded-data"))
+	}))
+	defer mockServer.Close()
+
+	client := NewMaskingService(
+		WithTransport(&HTTPTransport{Client: mockServer.Client()}),
+		WithBaseURL(mockServer.URL),
+	)
+
+	reader, err := client.DownloadImage("job-42")
+	require.NoError(t, err)
+	defer reader.Close()
+
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, "downloaded-data", string(data))
+}
+
+func TestMaskingService_Unauthorized(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error": "missing or invalid api key"}`))
+	}))
+	defer mockServer.Close()
+
+	tests := []struct {
+		name string
+		fn   func(*MaskingService) error
+	}{
+		{
+			name: "RequestMasking",
+			fn: func(s *MaskingService) error {
+				_, err := s.RequestMasking(PrepareForMasking(strings.NewReader("x")))
+				return err
+			},
+		},
+		{
+			name: "GetJobStatus",
+			fn: func(s *MaskingService) error {
+				_, err := s.GetJobStatus("job-x")
+				return err
+			},
+		},
+		{
+			name: "DownloadImage",
+			fn: func(s *MaskingService) error {
+				_, err := s.DownloadImage("job-x")
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewMaskingService(
+				WithTransport(&HTTPTransport{Client: mockServer.Client()}),
+				WithBaseURL(mockServer.URL),
+			)
+			err := tt.fn(client)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "401")
+			assert.Contains(t, err.Error(), "invalid api key")
+		})
+	}
 }
