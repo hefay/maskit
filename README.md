@@ -11,6 +11,9 @@ A Go client library for interacting with the [MaskIt API](https://www.maskit.ai/
 * **Automated Detection**: Support for faces, full human bodies, and license plates.
 * **Flexible Masking Shapes**: Choose between soft polygons (`ShapeMask`) or standard bounding boxes (`ShapeRectangle`).
 * **Anonymization Methods**: Support for Gaussian blur (`Blur`) or solid color fills (`BlackFill`).
+* **High-Level API**: `MaskImage` polls and downloads the result in one call.
+* **Low-Level API**: `RequestMasking`, `GetJobStatus`, `DownloadImage` for full control.
+* **Context Support**: All blocking operations respect `context.Context` for cancellation and timeouts.
 * **Production Ready**: Built-in support for custom transports and easy integration with existing `io.Reader` streams.
 
 ---
@@ -26,44 +29,67 @@ go get github.com/hefay/maskit
 
 To use the MaskIt API, you will need an API Key from the [MaskIt Dashboard](https://www.google.com/search?q=https://app.maskit.ai/).
 
+### High-Level API (recommended)
+
+Submit an image, poll for completion, and download the result — all in one call:
+
 ```go
 package main
 
 import (
-	"fmt"
+	"context"
+	"log"
 	"os"
+
 	"github.com/hefay/maskit"
 )
 
 func main() {
-	// Open an image to be masked
+	apiKey := os.Getenv("MASKIT_API_KEY")
+
 	file, err := os.Open("input.jpg")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	defer file.Close()
 
-	// Initialize the service
-	service := maskit.NewMaskingService()
+	service := maskit.NewMaskingService(maskit.WithApiKey(apiKey))
 
-	// Prepare a default request 
-	// (Masks faces, humans, and plates using Blur by default)
-	req := maskit.PrepareForMasking(file)
-	
-	// Customize the request if needed
-	req.Method = maskit.MethodBlackFill
-	req.BlurStrength = 50
-
-	// Send the request to MaskIt API
-	resp, err := service.RequestMasking(req)
+	ctx := context.Background()
+	data, err := service.MaskImage(ctx, file,
+		maskit.WithMethod(maskit.MethodBlackFill),
+		maskit.WithBlurStrength(50),
+	)
 	if err != nil {
-		fmt.Printf("Error during masking: %v\n", err)
-		return
+		log.Fatal(err)
 	}
 
-	fmt.Printf("Request successfully submitted. Job ID: %s\n", resp.JobID)
+	os.WriteFile("output_masked.jpg", data, 0644)
+	log.Println("Masked image saved to output_masked.jpg")
 }
+```
 
+### Low-Level API
+
+For full control over each step:
+
+```go
+apiKey := os.Getenv("MASKIT_API_KEY")
+service := maskit.NewMaskingService(maskit.WithApiKey(apiKey))
+
+// 1. Submit the image
+req := maskit.PrepareForMasking(file)
+resp, err := service.RequestMasking(req)
+// ...
+
+// 2. Poll for status (or use GetJobStatus directly)
+status, err := service.GetJobStatus(resp.JobID)
+// ...
+
+// 3. Download the result
+reader, err := service.DownloadImage(resp.JobID)
+defer reader.Close()
+data, _ := io.ReadAll(reader)
 ```
 
 ---
@@ -80,7 +106,22 @@ func main() {
 | `Method` | `Method` | Anonymization type: `MethodBlur` or `MethodBlackFill`. |
 | `BlurStrength` | `int` | Intensity of the blur effect. |
 | `EdgeBlurSize` | `float32` | Softness of the mask edges. |
+| `Metadata` | `string` | Optional metadata (e.g. user id, context). |
 | `UseWebhook` | `bool` | Whether to receive results via a configured webhook. |
+
+### `MaskOption` Functions
+
+Use with `MaskImage` to override defaults:
+
+- `WithShape(Shape)`
+- `WithMethod(Method)`
+- `WithFaces(bool)`
+- `WithHumans(bool)`
+- `WithLicensePlates(bool)`
+- `WithBlurStrength(int)`
+- `WithEdgeBlurSize(float32)`
+- `WithMetadata(string)`
+- `WithWebhook(bool)`
 
 ---
 
@@ -88,7 +129,7 @@ func main() {
 
 ### Custom Transport
 
-If you need to customize the underlying HTTP client (e.g., adding custom timeouts, logging, or middleware), you can implement the `Transport` interface and pass it using functional options:
+Implement the `Transport` interface for custom HTTP clients, logging, or middleware:
 
 ```go
 service := maskit.NewMaskingService(
@@ -97,16 +138,18 @@ service := maskit.NewMaskingService(
 
 ```
 
-### Shape Validation
+### Job Status Values
 
-The SDK includes a helper to ensure your requested masking shape is supported before the API call is made:
+The SDK defines the following `JobStatus` constants:
 
-```go
-if !req.Shape.IsValid() {
-    // Handle invalid shape
-}
-
-```
+| Constant | Description |
+| --- | --- |
+| `JobStatusPending` | Job is queued but not yet started |
+| `JobStatusInProgress` | Job is currently being processed |
+| `JobStatusReadyToDownload` | Image is processed and ready for download |
+| `JobStatusCompleted` | Job completed and post-processing succeeded |
+| `JobStatusTimedOut` | Job did not complete within the allowed time |
+| `JobStatusFailed` | An error occurred during processing |
 
 ---
 
@@ -117,7 +160,3 @@ For more detailed information about the underlying API, visit the [official Mask
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
-
----
-
-**Would you like me to add a section on how to handle the API response or implement a custom HTTP transport with API key headers?**
