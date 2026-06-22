@@ -57,6 +57,9 @@ func TestMultipartSerializer_Serialize(t *testing.T) {
 }
 
 func TestHTTPTransport_Send_Success(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.True(t, strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data"))
@@ -75,6 +78,9 @@ func TestHTTPTransport_Send_Success(t *testing.T) {
 }
 
 func TestHTTPTransport_Send_APIError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error": "invalid image format"}`))
@@ -91,6 +97,9 @@ func TestHTTPTransport_Send_APIError(t *testing.T) {
 }
 
 func TestHTTPTransport_Send_SetsAPIKeyHeader(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	var actualKey string
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		actualKey = r.Header.Get(APIKeyHeader)
@@ -109,6 +118,9 @@ func TestHTTPTransport_Send_SetsAPIKeyHeader(t *testing.T) {
 }
 
 func TestHTTPTransport_GetJobStatus(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	t.Run("success", func(t *testing.T) {
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
@@ -142,6 +154,9 @@ func TestHTTPTransport_GetJobStatus(t *testing.T) {
 }
 
 func TestHTTPTransport_DownloadImage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	t.Run("success", func(t *testing.T) {
 		expectedData := []byte("fake-jpeg-binary-data")
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

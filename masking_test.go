@@ -119,6 +119,9 @@ func TestDownloadImage(t *testing.T) {
 }
 
 func TestMaskImage_FullFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow test")
+	}
 	transport := NewMockTransport(t)
 	client := createTestClient(transport)
 
@@ -256,6 +259,9 @@ func TestMaskImage_SendError(t *testing.T) {
 }
 
 func TestMaskImage_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/masking/process-image":
@@ -299,6 +305,9 @@ func TestMaskImage_Integration(t *testing.T) {
 }
 
 func TestMaskImage_Integration_Unauthorized(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error": "invalid API key"}`))
@@ -318,6 +327,9 @@ func TestMaskImage_Integration_Unauthorized(t *testing.T) {
 }
 
 func TestMaskImage_Integration_FullPollFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	pollCount := 0
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -360,6 +372,9 @@ func TestMaskImage_Integration_FullPollFlow(t *testing.T) {
 }
 
 func TestGetJobStatus_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/masking/image-status", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
@@ -381,6 +396,9 @@ func TestGetJobStatus_Integration(t *testing.T) {
 }
 
 func TestDownloadImage_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/masking/image-download", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
@@ -404,6 +422,9 @@ func TestDownloadImage_Integration(t *testing.T) {
 }
 
 func TestMaskingService_Unauthorized(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error": "missing or invalid api key"}`))
