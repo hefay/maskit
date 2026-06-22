@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -201,12 +202,14 @@ func (ms *MaskingService) waitForReady(ctx context.Context, jobID string) error 
 			return err
 		}
 
-		switch status.Status {
-		case JobStatusReadyToDownload, JobStatusCompleted:
+		s := string(status.Status)
+		switch {
+		case strings.EqualFold(s, string(JobStatusReadyToDownload)),
+			strings.EqualFold(s, string(JobStatusCompleted)):
 			return nil
-		case JobStatusFailed:
+		case strings.EqualFold(s, string(JobStatusFailed)):
 			return fmt.Errorf("job %s failed", jobID)
-		case JobStatusTimedOut:
+		case strings.EqualFold(s, string(JobStatusTimedOut)):
 			return fmt.Errorf("job %s timed out", jobID)
 		}
 
