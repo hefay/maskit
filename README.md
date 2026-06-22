@@ -16,7 +16,7 @@ A Go client library for interacting with the [MaskIt API](https://www.maskit.ai/
 ## Installation
 
 ```bash
-go get github.com/yourusername/maskit-go
+go get github.com/hefay/maskit
 
 ```
 
@@ -30,7 +30,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"github.com/yourusername/maskit-go"
+	"github.com/hefay/maskit"
 )
 
 func main() {

@@ -1,35 +1,29 @@
-// Package maskit provides tools for interacting with the MaskIt API.
 package maskit
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"time"
 )
 
 const (
-	// MaskitAPIURL is the base URL for the MaskIt API.
-	MaskitAPIURL = "https://app.maskit.ai/api/v1"
-	// APIKeyHeader is the header key used for authentication.
-	APIKeyHeader = "X-Api-Key"
+	MaskitAPIURL      = "https://app.maskit.ai/api/v1"
+	APIKeyHeader      = "X-Api-Key"
+	pathProcessImage  = "/masking/process-image"
+	pathImageStatus   = "/masking/image-status"
+	pathImageDownload = "/masking/image-download"
+	pollInterval      = 2 * time.Second
 )
 
-// Humans indicates whether to detect and mask humans in the image.
 type Humans bool
-
-// Faces indicates whether to detect and mask faces in the image.
 type Faces bool
-
-// LicensePlates indicates whether to detect and mask license plates in the image.
 type LicensePlates bool
 
-// Shape used to mask areas: [ShapeMask] (soft polygon) or [ShapeRectangle] (bounding box).
 type Shape string
 
-//goland:noinspection GoUnusedConst
 const (
-	// ShapeMask uses a soft polygon for masking
-	ShapeMask Shape = `Mask`
-	// ShapeRectangle uses a bounding box for masking
+	ShapeMask      Shape = `Mask`
 	ShapeRectangle Shape = `Rectangle`
 )
 
@@ -41,48 +35,56 @@ func (s Shape) IsValid() bool {
 	return false
 }
 
-// Method is a method used for masking.
 type Method string
 
-//goland:noinspection GoUnusedConst
 const (
-	// MethodBlur indicates that a blur will be used for masking.
-	MethodBlur Method = `Blur`
-	// MethodBlackFill indicates that a black fill will be used for masking.
+	MethodBlur      Method = `Blur`
 	MethodBlackFill Method = `BlackFill`
 )
 
-// MaskingRequest represents a request sent to the masking API.
+type JobStatus string
+
+const (
+	JobStatusPending        JobStatus = "pending"
+	JobStatusInProgress     JobStatus = "inprogress"
+	JobStatusReadyToDownload JobStatus = "readytodownload"
+	JobStatusCompleted      JobStatus = "completed"
+	JobStatusTimedOut       JobStatus = "timedout"
+	JobStatusFailed         JobStatus = "failed"
+)
+
 type MaskingRequest struct {
-	Image io.Reader
-	// LicensePlates indicates whether to detect and mask license plates in the image.
-	Faces Faces
-	// Humans indicates whether to detect and mask humans in the image.
-	Humans Humans
-	// LicensePlates indicates whether to detect and mask license plates in the image.
+	Image         io.Reader
+	Faces         Faces
+	Humans        Humans
 	LicensePlates LicensePlates
-	// Shape used to mask areas: [ShapeMask] (soft polygon) or [ShapeRectangle] (bounding box).
-	Shape        Shape
-	Method       Method
-	BlurStrength int
-	EdgeBlurSize float32
-	Metadata     string
-	UseWebhook   bool
+	Shape         Shape
+	Method        Method
+	BlurStrength  int
+	EdgeBlurSize  float32
+	Metadata      string
+	UseWebhook    bool
 }
 
-// MaskingResponse represents the response from a masking request.
 type MaskingResponse struct {
 	JobID string `json:"JobId"`
+}
+
+type ImageStatusResponse struct {
+	JobID  string    `json:"JobId"`
+	Status JobStatus `json:"Status"`
 }
 
 //go:generate mockery
 type Transport interface {
 	Send(string, MaskingRequest) (MaskingResponse, error)
+	GetJobStatus(string) (ImageStatusResponse, error)
+	DownloadImage(string) (io.ReadCloser, error)
 }
 
 type MaskingService struct {
 	transport Transport
-	apiKey string
+	apiKey    string
 }
 
 type MaskingServiceOption func(*MaskingService)
@@ -99,7 +101,6 @@ func WithApiKey(key string) MaskingServiceOption {
 	}
 }
 
-// NewMaskingService creates a new instance of MaskingService.
 func NewMaskingService(options ...MaskingServiceOption) *MaskingService {
 	transport := &HTTPTransport{}
 	service := &MaskingService{
@@ -110,6 +111,10 @@ func NewMaskingService(options ...MaskingServiceOption) *MaskingService {
 		opt(service)
 	}
 
+	if t, ok := service.transport.(*HTTPTransport); ok && service.apiKey != "" {
+		t.APIKey = service.apiKey
+	}
+
 	return service
 }
 
@@ -117,14 +122,21 @@ func (ms *MaskingService) RequestMasking(req MaskingRequest) (MaskingResponse, e
 	if !req.Shape.IsValid() {
 		return MaskingResponse{}, fmt.Errorf("invalid shape: %s", req.Shape)
 	}
-	response, err := ms.transport.Send(MaskitAPIURL+"/masking/process-image", req)
+	response, err := ms.transport.Send(MaskitAPIURL+pathProcessImage, req)
 	if err != nil {
 		return MaskingResponse{}, err
 	}
 	return response, nil
 }
 
-// PrepareForMasking creates a default MaskingRequest for the given image.
+func (ms *MaskingService) GetJobStatus(jobID string) (ImageStatusResponse, error) {
+	return ms.transport.GetJobStatus(MaskitAPIURL + pathImageStatus + "?jobid=" + jobID)
+}
+
+func (ms *MaskingService) DownloadImage(jobID string) (io.ReadCloser, error) {
+	return ms.transport.DownloadImage(MaskitAPIURL + pathImageDownload + "?jobid=" + jobID)
+}
+
 func PrepareForMasking(image io.Reader) MaskingRequest {
 	return MaskingRequest{
 		Image:         image,
@@ -136,4 +148,97 @@ func PrepareForMasking(image io.Reader) MaskingRequest {
 		BlurStrength:  30,
 		EdgeBlurSize:  0.2,
 	}
+}
+
+type MaskOption func(*MaskingRequest)
+
+func WithShape(s Shape) MaskOption {
+	return func(r *MaskingRequest) { r.Shape = s }
+}
+
+func WithMethod(m Method) MaskOption {
+	return func(r *MaskingRequest) { r.Method = m }
+}
+
+func WithFaces(v bool) MaskOption {
+	return func(r *MaskingRequest) { r.Faces = Faces(v) }
+}
+
+func WithHumans(v bool) MaskOption {
+	return func(r *MaskingRequest) { r.Humans = Humans(v) }
+}
+
+func WithLicensePlates(v bool) MaskOption {
+	return func(r *MaskingRequest) { r.LicensePlates = LicensePlates(v) }
+}
+
+func WithBlurStrength(v int) MaskOption {
+	return func(r *MaskingRequest) { r.BlurStrength = v }
+}
+
+func WithEdgeBlurSize(v float32) MaskOption {
+	return func(r *MaskingRequest) { r.EdgeBlurSize = v }
+}
+
+func WithMetadata(v string) MaskOption {
+	return func(r *MaskingRequest) { r.Metadata = v }
+}
+
+func WithWebhook(v bool) MaskOption {
+	return func(r *MaskingRequest) { r.UseWebhook = v }
+}
+
+func (ms *MaskingService) waitForReady(ctx context.Context, jobID string) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		status, err := ms.GetJobStatus(jobID)
+		if err != nil {
+			return err
+		}
+
+		switch status.Status {
+		case JobStatusReadyToDownload, JobStatusCompleted:
+			return nil
+		case JobStatusFailed:
+			return fmt.Errorf("job %s failed", jobID)
+		case JobStatusTimedOut:
+			return fmt.Errorf("job %s timed out", jobID)
+		}
+
+		timer := time.NewTimer(pollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func (ms *MaskingService) MaskImage(ctx context.Context, image io.Reader, opts ...MaskOption) ([]byte, error) {
+	req := PrepareForMasking(image)
+	for _, opt := range opts {
+		opt(&req)
+	}
+
+	resp, err := ms.RequestMasking(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := ms.waitForReady(ctx, resp.JobID); err != nil {
+		return nil, err
+	}
+
+	reader, err := ms.DownloadImage(resp.JobID)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(reader)
 }
