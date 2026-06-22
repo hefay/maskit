@@ -1,16 +1,19 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/hefay/maskit"
 )
+
+const pollInterval = 2 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -21,6 +24,7 @@ func main() {
 
 func run() error {
 	key := flag.String("key", "", "API key (env MASKIT_API_KEY or ~/.maskit fallback)")
+	verbose := flag.Bool("verbose", false, "Verbose output")
 	faces := flag.Bool("faces", true, "Detect and mask faces")
 	humans := flag.Bool("humans", true, "Detect and mask humans")
 	plates := flag.Bool("plates", true, "Detect and mask license plates")
@@ -29,6 +33,8 @@ func run() error {
 	blurStrength := flag.Int("blur-strength", 30, "Gaussian blur strength")
 	edgeBlur := flag.Float64("edge-blur", 0.2, "Edge blur size (0.0–1.0)")
 	output := flag.String("output", "", "Output file path")
+
+	flag.BoolVar(verbose, "v", false, "Verbose output (short)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: maskit [flags] <image-file>\n\nFlags:\n")
@@ -81,25 +87,101 @@ func run() error {
 		return fmt.Errorf("invalid method %q: use blur or blackfill", *method)
 	}
 
-	ctx := context.Background()
-	data, err := service.MaskImage(ctx, file, opts...)
+	req := maskit.PrepareForMasking(file)
+	for _, opt := range opts {
+		opt(&req)
+	}
+
+	log(*verbose, "Submitting image...")
+
+	resp, err := service.RequestMasking(req)
 	if err != nil {
-		return fmt.Errorf("masking failed: %w", err)
+		return fmt.Errorf("request failed: %w", err)
 	}
 
-	outPath := *output
-	if outPath == "" {
-		ext := filepath.Ext(inputPath)
-		base := strings.TrimSuffix(inputPath, ext)
-		outPath = base + "_masked" + ext
-	}
+	verboseLogf(*verbose, "Job submitted: %s", resp.JobID)
+	verboseLogf(*verbose, "Waiting for processing...")
 
-	if err := os.WriteFile(outPath, data, 0644); err != nil {
-		return fmt.Errorf("cannot write output: %w", err)
-	}
+	start := time.Now()
+	const maxDots = 60
 
-	fmt.Println("Saved to", outPath)
-	return nil
+	for {
+		status, err := service.GetJobStatus(resp.JobID)
+		if err != nil {
+			fmt.Println()
+			return fmt.Errorf("status check failed: %w", err)
+		}
+
+		switch status.Status {
+		case maskit.JobStatusReadyToDownload, maskit.JobStatusCompleted:
+			elapsed := time.Since(start).Truncate(time.Second)
+			verboseLogf(*verbose, "Ready after %s", elapsed)
+			if !*verbose {
+				fmt.Println(" done!")
+			}
+
+			log(*verbose, "Downloading masked image...")
+
+			reader, err := service.DownloadImage(resp.JobID)
+			if err != nil {
+				return fmt.Errorf("download failed: %w", err)
+			}
+			defer reader.Close()
+
+			data, err := io.ReadAll(reader)
+			if err != nil {
+				return fmt.Errorf("cannot read response: %w", err)
+			}
+
+			outPath := *output
+			if outPath == "" {
+				ext := filepath.Ext(inputPath)
+				base := strings.TrimSuffix(inputPath, ext)
+				outPath = base + "_masked" + ext
+			}
+
+			if err := os.WriteFile(outPath, data, 0644); err != nil {
+				return fmt.Errorf("cannot write output: %w", err)
+			}
+
+			log(*verbose, "Saved to "+outPath)
+			return nil
+
+		case maskit.JobStatusFailed:
+			fmt.Println()
+			return fmt.Errorf("job %s failed", resp.JobID)
+
+		case maskit.JobStatusTimedOut:
+			fmt.Println()
+			return fmt.Errorf("job %s timed out", resp.JobID)
+
+		default:
+			if *verbose {
+				elapsed := time.Since(start).Truncate(time.Second)
+				fmt.Printf("  [%4s] Status: %s\n", elapsed, status.Status)
+			} else {
+				fmt.Print(".")
+				// break line if too many dots to avoid runaway lines
+				if dots := int(time.Since(start)/pollInterval) % maxDots; dots == 0 {
+					fmt.Printf(" %s\n", time.Since(start).Truncate(time.Second))
+				}
+			}
+		}
+
+		time.Sleep(pollInterval)
+	}
+}
+
+func log(verbose bool, msg string) {
+	if verbose {
+		fmt.Println(msg)
+	}
+}
+
+func verboseLogf(verbose bool, format string, args ...any) {
+	if verbose {
+		fmt.Printf(format+"\n", args...)
+	}
 }
 
 func resolveAPIKey(flagKey string) string {
