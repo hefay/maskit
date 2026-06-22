@@ -45,12 +45,12 @@ const (
 type JobStatus string
 
 const (
-	JobStatusPending        JobStatus = "pending"
-	JobStatusInProgress     JobStatus = "inprogress"
-	JobStatusReadyToDownload JobStatus = "readytodownload"
-	JobStatusCompleted      JobStatus = "completed"
-	JobStatusTimedOut       JobStatus = "timedout"
-	JobStatusFailed         JobStatus = "failed"
+	JobStatusPending        JobStatus = "Pending"
+	JobStatusInProgress     JobStatus = "InProgress"
+	JobStatusReadyToDownload JobStatus = "ReadyToDownload"
+	JobStatusCompleted      JobStatus = "Completed"
+	JobStatusTimedOut       JobStatus = "TimedOut"
+	JobStatusFailed         JobStatus = "Failed"
 )
 
 type MaskingRequest struct {

@@ -115,7 +115,7 @@ func TestHTTPTransport_GetJobStatus(t *testing.T) {
 			assert.Equal(t, "job-123", r.URL.Query().Get("jobid"))
 			w.WriteHeader(http.StatusOK)
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"JobId": "job-123", "Status": "readytodownload"}`))
+			_, _ = w.Write([]byte(`{"JobId": "job-123", "Status": "ReadyToDownload"}`))
 		}))
 		defer mockServer.Close()
 
