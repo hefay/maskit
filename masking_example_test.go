@@ -1,6 +1,7 @@
 package maskit_test
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -42,7 +43,7 @@ func ExampleMaskingService_RequestMasking() {
 	service := maskit.NewMaskingService(maskit.WithApiKey(apiKey))
 
 	// 5. Execute the masking request
-	resp, err := service.RequestMasking(req)
+	resp, err := service.RequestMasking(context.Background(), req)
 	if err != nil {
 		log.Fatalf("Masking request failed: %v", err)
 	}

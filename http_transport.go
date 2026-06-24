@@ -2,6 +2,7 @@ package maskit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -121,7 +122,7 @@ func (t *HTTPTransport) doRequest(req *http.Request) (*http.Response, error) {
 }
 
 // Send executes the masking request utilizing the configured Serializer and Deserializer.
-func (t *HTTPTransport) Send(url string, payload MaskingRequest) (MaskingResponse, error) {
+func (t *HTTPTransport) Send(ctx context.Context, url string, payload MaskingRequest) (MaskingResponse, error) {
 	// Use default serializer if none is provided
 	serializer := t.Serializer
 	if serializer == nil {
@@ -141,7 +142,7 @@ func (t *HTTPTransport) Send(url string, payload MaskingRequest) (MaskingRespons
 	}
 
 	// 2. Create the HTTP POST request
-	req, err := http.NewRequest(http.MethodPost, url, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bodyReader)
 	if err != nil {
 		return MaskingResponse{}, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
@@ -162,8 +163,8 @@ func (t *HTTPTransport) Send(url string, payload MaskingRequest) (MaskingRespons
 }
 
 // GetJobStatus calls the image-status endpoint and returns the current job status.
-func (t *HTTPTransport) GetJobStatus(url string) (ImageStatusResponse, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func (t *HTTPTransport) GetJobStatus(ctx context.Context, url string) (ImageStatusResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return ImageStatusResponse{}, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
@@ -182,8 +183,8 @@ func (t *HTTPTransport) GetJobStatus(url string) (ImageStatusResponse, error) {
 }
 
 // DownloadImage calls the image-download endpoint and returns the masked image as a stream.
-func (t *HTTPTransport) DownloadImage(url string) (io.ReadCloser, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func (t *HTTPTransport) DownloadImage(ctx context.Context, url string) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}

@@ -74,20 +74,21 @@ func main() {
 For full control over each step:
 
 ```go
+ctx := context.Background()
 apiKey := os.Getenv("MASKIT_API_KEY")
 service := maskit.NewMaskingService(maskit.WithApiKey(apiKey))
 
 // 1. Submit the image
 req := maskit.PrepareForMasking(file)
-resp, err := service.RequestMasking(req)
+resp, err := service.RequestMasking(ctx, req)
 // ...
 
 // 2. Poll for status (or use GetJobStatus directly)
-status, err := service.GetJobStatus(resp.JobID)
+status, err := service.GetJobStatus(ctx, resp.JobID)
 // ...
 
 // 3. Download the result
-reader, err := service.DownloadImage(resp.JobID)
+reader, err := service.DownloadImage(ctx, resp.JobID)
 defer reader.Close()
 data, _ := io.ReadAll(reader)
 ```

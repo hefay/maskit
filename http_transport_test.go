@@ -1,6 +1,7 @@
 package maskit
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -69,7 +70,7 @@ func TestHTTPTransport_Send_Success(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	resp, err := (&HTTPTransport{Client: mockServer.Client()}).Send(mockServer.URL, MaskingRequest{
+	resp, err := (&HTTPTransport{Client: mockServer.Client()}).Send(context.Background(), mockServer.URL, MaskingRequest{
 		Image: strings.NewReader("dummy-image"),
 	})
 
@@ -87,7 +88,7 @@ func TestHTTPTransport_Send_APIError(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	_, err := (&HTTPTransport{Client: mockServer.Client()}).Send(mockServer.URL, MaskingRequest{
+	_, err := (&HTTPTransport{Client: mockServer.Client()}).Send(context.Background(), mockServer.URL, MaskingRequest{
 		Image: strings.NewReader("bad-data"),
 	})
 
@@ -112,7 +113,7 @@ func TestHTTPTransport_Send_SetsAPIKeyHeader(t *testing.T) {
 	_, _ = (&HTTPTransport{
 		Client: mockServer.Client(),
 		APIKey: "my-secret-key",
-	}).Send(mockServer.URL, MaskingRequest{Image: strings.NewReader("img")})
+	}).Send(context.Background(), mockServer.URL, MaskingRequest{Image: strings.NewReader("img")})
 
 	assert.Equal(t, "my-secret-key", actualKey)
 }
@@ -131,7 +132,7 @@ func TestHTTPTransport_GetJobStatus(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		resp, err := (&HTTPTransport{Client: mockServer.Client()}).GetJobStatus(mockServer.URL + "?jobid=job-123")
+		resp, err := (&HTTPTransport{Client: mockServer.Client()}).GetJobStatus(context.Background(), mockServer.URL+"?jobid=job-123")
 
 		require.NoError(t, err)
 		assert.Equal(t, "job-123", resp.JobID)
@@ -145,7 +146,7 @@ func TestHTTPTransport_GetJobStatus(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		_, err := (&HTTPTransport{Client: mockServer.Client()}).GetJobStatus(mockServer.URL)
+		_, err := (&HTTPTransport{Client: mockServer.Client()}).GetJobStatus(context.Background(), mockServer.URL)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "404")
@@ -168,7 +169,7 @@ func TestHTTPTransport_DownloadImage(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		reader, err := (&HTTPTransport{Client: mockServer.Client()}).DownloadImage(mockServer.URL + "?jobid=job-456")
+		reader, err := (&HTTPTransport{Client: mockServer.Client()}).DownloadImage(context.Background(), mockServer.URL+"?jobid=job-456")
 		require.NoError(t, err)
 		defer reader.Close()
 
@@ -184,7 +185,7 @@ func TestHTTPTransport_DownloadImage(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		_, err := (&HTTPTransport{Client: mockServer.Client()}).DownloadImage(mockServer.URL)
+		_, err := (&HTTPTransport{Client: mockServer.Client()}).DownloadImage(context.Background(), mockServer.URL)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "400")

@@ -22,7 +22,7 @@ func TestOneImage(t *testing.T) {
 	var capturedRequest MaskingRequest
 
 	transport.EXPECT().
-		Send("https://app.maskit.ai/api/v1/masking/process-image", mock.MatchedBy(func(v MaskingRequest) bool {
+		Send(mock.Anything, "https://app.maskit.ai/api/v1/masking/process-image", mock.MatchedBy(func(v MaskingRequest) bool {
 			capturedRequest = v
 			return true
 		})).
@@ -31,7 +31,7 @@ func TestOneImage(t *testing.T) {
 	image := readTestImage(t)
 	masking := PrepareForMasking(image)
 
-	response, err := testClient.RequestMasking(masking)
+	response, err := testClient.RequestMasking(context.Background(), masking)
 
 	require.NoError(t, err)
 	assert.Equal(t, "new-job-id", response.JobID)
@@ -60,7 +60,7 @@ func TestRequestMasking_Validation(t *testing.T) {
 			masking := PrepareForMasking(image)
 			masking.Shape = tt.shape
 
-			_, err := testClient.RequestMasking(masking)
+			_, err := testClient.RequestMasking(context.Background(), masking)
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectedError)
@@ -90,10 +90,10 @@ func TestGetJobStatus(t *testing.T) {
 	client := createTestClient(transport)
 
 	transport.EXPECT().
-		GetJobStatus("https://app.maskit.ai/api/v1/masking/image-status?jobid=job-1").
+		GetJobStatus(mock.Anything, "https://app.maskit.ai/api/v1/masking/image-status?jobid=job-1").
 		Return(ImageStatusResponse{JobID: "job-1", Status: JobStatusReadyToDownload}, nil)
 
-	resp, err := client.GetJobStatus("job-1")
+	resp, err := client.GetJobStatus(context.Background(), "job-1")
 
 	require.NoError(t, err)
 	assert.Equal(t, "job-1", resp.JobID)
@@ -106,10 +106,10 @@ func TestDownloadImage(t *testing.T) {
 	expectedData := io.NopCloser(strings.NewReader("fake-image-data"))
 
 	transport.EXPECT().
-		DownloadImage("https://app.maskit.ai/api/v1/masking/image-download?jobid=job-1").
+		DownloadImage(mock.Anything, "https://app.maskit.ai/api/v1/masking/image-download?jobid=job-1").
 		Return(expectedData, nil)
 
-	reader, err := client.DownloadImage("job-1")
+	reader, err := client.DownloadImage(context.Background(), "job-1")
 
 	require.NoError(t, err)
 	defer reader.Close()
@@ -126,21 +126,21 @@ func TestMaskImage_FullFlow(t *testing.T) {
 	client := createTestClient(transport)
 
 	transport.EXPECT().
-		Send(mock.AnythingOfType("string"), mock.AnythingOfType("maskit.MaskingRequest")).
+		Send(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("maskit.MaskingRequest")).
 		Return(MaskingResponse{JobID: "job-42"}, nil)
 
 	transport.EXPECT().
-		GetJobStatus(mock.AnythingOfType("string")).
+		GetJobStatus(mock.Anything, mock.AnythingOfType("string")).
 		Return(ImageStatusResponse{JobID: "job-42", Status: JobStatusInProgress}, nil).
 		Once()
 
 	transport.EXPECT().
-		GetJobStatus(mock.AnythingOfType("string")).
+		GetJobStatus(mock.Anything, mock.AnythingOfType("string")).
 		Return(ImageStatusResponse{JobID: "job-42", Status: JobStatusReadyToDownload}, nil).
 		Once()
 
 	transport.EXPECT().
-		DownloadImage(mock.AnythingOfType("string")).
+		DownloadImage(mock.Anything, mock.AnythingOfType("string")).
 		Return(io.NopCloser(strings.NewReader("masked-image-data")), nil)
 
 	ctx := context.Background()
@@ -155,11 +155,11 @@ func TestMaskImage_CancelledContext(t *testing.T) {
 	client := createTestClient(transport)
 
 	transport.EXPECT().
-		Send(mock.AnythingOfType("string"), mock.AnythingOfType("maskit.MaskingRequest")).
+		Send(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("maskit.MaskingRequest")).
 		Return(MaskingResponse{JobID: "job-cancel"}, nil)
 
 	transport.EXPECT().
-		GetJobStatus(mock.AnythingOfType("string")).
+		GetJobStatus(mock.Anything, mock.AnythingOfType("string")).
 		Return(ImageStatusResponse{JobID: "job-cancel", Status: JobStatusInProgress}, nil).
 		Maybe()
 
@@ -175,11 +175,11 @@ func TestMaskImage_JobFailed(t *testing.T) {
 	client := createTestClient(transport)
 
 	transport.EXPECT().
-		Send(mock.AnythingOfType("string"), mock.AnythingOfType("maskit.MaskingRequest")).
+		Send(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("maskit.MaskingRequest")).
 		Return(MaskingResponse{JobID: "job-fail"}, nil)
 
 	transport.EXPECT().
-		GetJobStatus(mock.AnythingOfType("string")).
+		GetJobStatus(mock.Anything, mock.AnythingOfType("string")).
 		Return(ImageStatusResponse{JobID: "job-fail", Status: JobStatusFailed}, nil)
 
 	ctx := context.Background()
@@ -195,18 +195,18 @@ func TestMaskImage_WithOptions(t *testing.T) {
 
 	var captured MaskingRequest
 	transport.EXPECT().
-		Send(mock.AnythingOfType("string"), mock.MatchedBy(func(r MaskingRequest) bool {
+		Send(mock.Anything, mock.AnythingOfType("string"), mock.MatchedBy(func(r MaskingRequest) bool {
 			captured = r
 			return true
 		})).
 		Return(MaskingResponse{JobID: "job-opt"}, nil)
 
 	transport.EXPECT().
-		GetJobStatus(mock.AnythingOfType("string")).
+		GetJobStatus(mock.Anything, mock.AnythingOfType("string")).
 		Return(ImageStatusResponse{JobID: "job-opt", Status: JobStatusReadyToDownload}, nil)
 
 	transport.EXPECT().
-		DownloadImage(mock.AnythingOfType("string")).
+		DownloadImage(mock.Anything, mock.AnythingOfType("string")).
 		Return(io.NopCloser(strings.NewReader("data")), nil)
 
 	ctx := context.Background()
@@ -231,11 +231,11 @@ func TestMaskImage_JobTimedOut(t *testing.T) {
 	client := createTestClient(transport)
 
 	transport.EXPECT().
-		Send(mock.AnythingOfType("string"), mock.AnythingOfType("maskit.MaskingRequest")).
+		Send(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("maskit.MaskingRequest")).
 		Return(MaskingResponse{JobID: "job-timeout"}, nil)
 
 	transport.EXPECT().
-		GetJobStatus(mock.AnythingOfType("string")).
+		GetJobStatus(mock.Anything, mock.AnythingOfType("string")).
 		Return(ImageStatusResponse{JobID: "job-timeout", Status: JobStatusTimedOut}, nil)
 
 	ctx := context.Background()
@@ -250,7 +250,7 @@ func TestMaskImage_SendError(t *testing.T) {
 	client := createTestClient(transport)
 
 	transport.EXPECT().
-		Send(mock.AnythingOfType("string"), mock.AnythingOfType("maskit.MaskingRequest")).
+		Send(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("maskit.MaskingRequest")).
 		Return(MaskingResponse{}, assert.AnError)
 
 	ctx := context.Background()
@@ -388,7 +388,7 @@ func TestGetJobStatus_Integration(t *testing.T) {
 		WithBaseURL(mockServer.URL),
 	)
 
-	resp, err := client.GetJobStatus("job-42")
+	resp, err := client.GetJobStatus(context.Background(), "job-42")
 
 	require.NoError(t, err)
 	assert.Equal(t, "job-42", resp.JobID)
@@ -412,7 +412,7 @@ func TestDownloadImage_Integration(t *testing.T) {
 		WithBaseURL(mockServer.URL),
 	)
 
-	reader, err := client.DownloadImage("job-42")
+	reader, err := client.DownloadImage(context.Background(), "job-42")
 	require.NoError(t, err)
 	defer reader.Close()
 
@@ -438,21 +438,21 @@ func TestMaskingService_Unauthorized(t *testing.T) {
 		{
 			name: "RequestMasking",
 			fn: func(s *MaskingService) error {
-				_, err := s.RequestMasking(PrepareForMasking(strings.NewReader("x")))
+				_, err := s.RequestMasking(context.Background(), PrepareForMasking(strings.NewReader("x")))
 				return err
 			},
 		},
 		{
 			name: "GetJobStatus",
 			fn: func(s *MaskingService) error {
-				_, err := s.GetJobStatus("job-x")
+				_, err := s.GetJobStatus(context.Background(), "job-x")
 				return err
 			},
 		},
 		{
 			name: "DownloadImage",
 			fn: func(s *MaskingService) error {
-				_, err := s.DownloadImage("job-x")
+				_, err := s.DownloadImage(context.Background(), "job-x")
 				return err
 			},
 		},

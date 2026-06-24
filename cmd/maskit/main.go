@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -59,6 +60,7 @@ func run() error {
 	}
 	defer file.Close()
 
+	ctx := context.Background()
 	service := maskit.NewMaskingService(maskit.WithApiKey(apiKey))
 
 	opts := []maskit.MaskOption{
@@ -94,7 +96,7 @@ func run() error {
 
 	log(*verbose, "Submitting image...")
 
-	resp, err := service.RequestMasking(req)
+	resp, err := service.RequestMasking(ctx, req)
 	if err != nil {
 		return wrapError(fmt.Errorf("request failed: %w", err))
 	}
@@ -106,7 +108,7 @@ func run() error {
 	const maxDots = 60
 
 	for {
-		status, err := service.GetJobStatus(resp.JobID)
+		status, err := service.GetJobStatus(ctx, resp.JobID)
 		if err != nil {
 			fmt.Println()
 			return wrapError(fmt.Errorf("status check failed: %w", err))
@@ -122,7 +124,7 @@ func run() error {
 
 			log(*verbose, "Downloading masked image...")
 
-			reader, err := service.DownloadImage(resp.JobID)
+			reader, err := service.DownloadImage(ctx, resp.JobID)
 			if err != nil {
 				return wrapError(fmt.Errorf("download failed: %w", err))
 			}

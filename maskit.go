@@ -78,9 +78,9 @@ type ImageStatusResponse struct {
 
 //go:generate mockery
 type Transport interface {
-	Send(string, MaskingRequest) (MaskingResponse, error)
-	GetJobStatus(string) (ImageStatusResponse, error)
-	DownloadImage(string) (io.ReadCloser, error)
+	Send(ctx context.Context, url string, payload MaskingRequest) (MaskingResponse, error)
+	GetJobStatus(ctx context.Context, url string) (ImageStatusResponse, error)
+	DownloadImage(ctx context.Context, url string) (io.ReadCloser, error)
 }
 
 type MaskingService struct {
@@ -133,23 +133,23 @@ func NewMaskingService(options ...MaskingServiceOption) *MaskingService {
 	return service
 }
 
-func (ms *MaskingService) RequestMasking(req MaskingRequest) (MaskingResponse, error) {
+func (ms *MaskingService) RequestMasking(ctx context.Context, req MaskingRequest) (MaskingResponse, error) {
 	if !req.Shape.IsValid() {
 		return MaskingResponse{}, fmt.Errorf("invalid shape: %s", req.Shape)
 	}
-	response, err := ms.transport.Send(ms.urlFor(pathProcessImage), req)
+	response, err := ms.transport.Send(ctx, ms.urlFor(pathProcessImage), req)
 	if err != nil {
 		return MaskingResponse{}, err
 	}
 	return response, nil
 }
 
-func (ms *MaskingService) GetJobStatus(jobID string) (ImageStatusResponse, error) {
-	return ms.transport.GetJobStatus(ms.urlFor(pathImageStatus + "?jobid=" + jobID))
+func (ms *MaskingService) GetJobStatus(ctx context.Context, jobID string) (ImageStatusResponse, error) {
+	return ms.transport.GetJobStatus(ctx, ms.urlFor(pathImageStatus+"?jobid="+jobID))
 }
 
-func (ms *MaskingService) DownloadImage(jobID string) (io.ReadCloser, error) {
-	return ms.transport.DownloadImage(ms.urlFor(pathImageDownload + "?jobid=" + jobID))
+func (ms *MaskingService) DownloadImage(ctx context.Context, jobID string) (io.ReadCloser, error) {
+	return ms.transport.DownloadImage(ctx, ms.urlFor(pathImageDownload+"?jobid="+jobID))
 }
 
 func PrepareForMasking(image io.Reader) MaskingRequest {
@@ -211,7 +211,7 @@ func (ms *MaskingService) waitForReady(ctx context.Context, jobID string) error 
 		default:
 		}
 
-		status, err := ms.GetJobStatus(jobID)
+		status, err := ms.GetJobStatus(ctx, jobID)
 		if err != nil {
 			return err
 		}
@@ -243,7 +243,7 @@ func (ms *MaskingService) MaskImage(ctx context.Context, image io.Reader, opts .
 		opt(&req)
 	}
 
-	resp, err := ms.RequestMasking(req)
+	resp, err := ms.RequestMasking(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +252,7 @@ func (ms *MaskingService) MaskImage(ctx context.Context, image io.Reader, opts .
 		return nil, err
 	}
 
-	reader, err := ms.DownloadImage(resp.JobID)
+	reader, err := ms.DownloadImage(ctx, resp.JobID)
 	if err != nil {
 		return nil, err
 	}
