@@ -1,7 +1,6 @@
-[![Tests](https://github.com/hefay/maskit/actions/workflows/tests.yml/badge.svg)](https://github.com/hefay/maskit/actions/workflows/tests.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/hefay/maskit#section-readme.svg)](https://pkg.go.dev/github.com/hefay/maskit#section-readme)
+[![Tests](https://github.com/hefay/maskit/actions/workflows/tests.yml/badge.svg)](https://github.com/hefay/maskit/actions/workflows/tests.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/hefay/maskit.svg)](https://pkg.go.dev/github.com/hefay/maskit)
 
-### MaskIt Go SDK
+# MaskIt Go SDK
 
 A Go client library for interacting with the [MaskIt API](https://www.maskit.ai/). This package allows you to easily integrate automated anonymization of faces, humans, and license plates into your Go applications.
 
@@ -23,12 +22,11 @@ A Go client library for interacting with the [MaskIt API](https://www.maskit.ai/
 
 ```bash
 go get github.com/hefay/maskit
-
 ```
 
 ## Quick Start
 
-To use the MaskIt API, you will need an API Key from the [MaskIt Dashboard](https://www.google.com/search?q=https://app.maskit.ai/).
+To use the MaskIt API, you will need an API Key from the [MaskIt Dashboard](https://app.maskit.ai/).
 
 ### High-Level API (recommended)
 
