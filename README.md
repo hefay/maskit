@@ -1,4 +1,5 @@
 [![Tests](https://github.com/hefay/maskit/actions/workflows/tests.yml/badge.svg)](https://github.com/hefay/maskit/actions/workflows/tests.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/hefay/maskit#section-readme.svg)](https://pkg.go.dev/github.com/hefay/maskit#section-readme)
 
 ### MaskIt Go SDK
 
